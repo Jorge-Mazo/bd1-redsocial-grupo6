@@ -1,0 +1,308 @@
+-- =====================================================================
+-- TAREA 5: SISTEMA DE CONSULTAS DML Y VISTAS
+-- Red social estudiantil pascualina - Grupo 6
+-- SGBD: PostgreSQL 16
+-- Integrantes: Karen Castro, Jorge Mazo, Samuel Hincapié,
+--              Paula Morales, Ali Arias
+-- Fecha: 2026-11-15
+--
+-- Este script contiene:
+--   - 6 consultas DML significativas con preguntas de negocio.
+--   - 4 vistas (VIEWS) con su consulta de prueba.
+--   - Comentarios detallados y justificación de ALIAS.
+--
+-- Requiere haber ejecutado previamente el script DDL de la Tarea 4.
+-- =====================================================================
+
+-- =====================================================================
+-- SECCIÓN 1: CONSULTAS DML (DATA MANIPULATION LANGUAGE)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- CONSULTA 1: ¿Cuántos estudiantes están interesados en "programación competitiva"?
+-- ---------------------------------------------------------------------
+-- Pregunta de negocio: Saber la demanda potencial para un club o grupo de
+-- programación competitiva, y así planificar recursos y mentorías.
+--
+-- Explicación: Se une la tabla estudiante_interes con interes para filtrar
+-- por el nombre del interés. Se cuenta el número de estudiantes distintos.
+-- Se usa COUNT(DISTINCT e.codigo_estudiante) para evitar duplicados si un
+-- estudiante tuviera el interés repetido (no debería por la PK compuesta,
+-- pero es buena práctica).
+--
+-- Justificación del ALIAS: Se usa "total_estudiantes_interesados" para que
+-- el resultado sea autoexplicativo y legible en cualquier reporte.
+-- ---------------------------------------------------------------------
+SELECT COUNT(DISTINCT ei.codigo_estudiante) AS total_estudiantes_interesados
+FROM estudiante_interes ei
+JOIN interes i ON ei.codigo_interes = i.codigo_interes
+WHERE i.nombre_interes = 'Programación competitiva';
+
+-- ---------------------------------------------------------------------
+-- CONSULTA 2: Top 5 estudiantes con más publicaciones y reacciones recibidas
+-- ---------------------------------------------------------------------
+-- Pregunta de negocio: Identificar a los estudiantes más activos e influyentes
+-- en el muro, para reconocerlos o invitarlos a ser mentores.
+--
+-- Explicación: Se agrupa por estudiante, se cuentan sus publicaciones y se
+-- suman las reacciones recibidas en todas ellas. Se ordena por publicaciones
+-- descendente y se limita a 5. Se usa LEFT JOIN para incluir estudiantes
+-- que tengan publicaciones pero aún no reacciones (aunque en la práctica
+-- la mayoría tendrá alguna).
+--
+-- Justificación del ALIAS: "total_publicaciones" y "total_reacciones" son
+-- claros y siguen snake_case. "nombre_completo" se concatena para mejor
+-- presentación.
+-- ---------------------------------------------------------------------
+SELECT 
+    e.codigo_estudiante,
+    e.nombre || ' ' || e.apellido AS nombre_completo,
+    COUNT(DISTINCT p.codigo_publicacion) AS total_publicaciones,
+    COUNT(r.codigo_publicacion) AS total_reacciones
+FROM estudiante e
+JOIN publicacion p ON e.codigo_estudiante = p.codigo_estudiante
+LEFT JOIN reaccion r ON p.codigo_publicacion = r.codigo_publicacion
+GROUP BY e.codigo_estudiante, e.nombre, e.apellido
+ORDER BY total_publicaciones DESC, total_reacciones DESC
+LIMIT 5;
+
+-- ---------------------------------------------------------------------
+-- CONSULTA 3: Mentores habilitados por materia (solo materias de semestre 5+)
+-- ---------------------------------------------------------------------
+-- Pregunta de negocio: Listar los mentores disponibles para materias avanzadas,
+-- de modo que los estudiantes de semestres inferiores puedan solicitar apoyo.
+--
+-- Explicación: Se unen mentor_materia_habilitada, estudiante, materia_asignatura
+-- y programa_academico. Se filtra por semestre >= 5. Se ordena por nombre de
+-- materia y luego por nombre del mentor.
+--
+-- Justificación del ALIAS: Se usan alias descriptivos como "nombre_mentor",
+-- "nombre_materia", "nombre_programa". La concatenación se alias como
+-- "mentor_completo" para claridad.
+-- ---------------------------------------------------------------------
+SELECT 
+    m.nombre_materia AS nombre_materia,
+    m.semestre AS semestre_materia,
+    p.nombre_programa AS nombre_programa,
+    e.nombre || ' ' || e.apellido AS mentor_completo,
+    mm.fecha_habilitacion AS fecha_habilitacion
+FROM mentor_materia_habilitada mm
+JOIN estudiante e ON mm.codigo_estudiante = e.codigo_estudiante
+JOIN materia_asignatura m ON mm.codigo_materia = m.codigo_materia
+JOIN programa_academico p ON m.codigo_programa = p.codigo_programa
+WHERE m.semestre >= 5
+ORDER BY m.nombre_materia, mentor_completo;
+
+-- ---------------------------------------------------------------------
+-- CONSULTA 4: Promedio de valoración de recursos académicos por materia
+-- ---------------------------------------------------------------------
+-- Pregunta de negocio: Conocer qué materias tienen recursos mejor valorados,
+-- para destacar a los autores o promover su uso.
+--
+-- Explicación: Se agrupa por materia, se calcula el promedio de puntuación
+-- (redondeado a 2 decimales) y se cuenta el número de valoraciones. Se usa
+-- INNER JOIN porque solo interesan recursos que tengan al menos una valoración.
+--
+-- Justificación del ALIAS: "promedio_valoracion" y "total_valoraciones" son
+-- autoexplicativos. Se usa ROUND para mejorar presentación.
+-- ---------------------------------------------------------------------
+SELECT 
+    m.nombre_materia AS nombre_materia,
+    ROUND(AVG(v.puntuacion), 2) AS promedio_valoracion,
+    COUNT(v.codigo_recurso) AS total_valoraciones
+FROM valoracion_recurso v
+JOIN recurso_academico r ON v.codigo_recurso = r.codigo_recurso
+JOIN materia_asignatura m ON r.codigo_materia = m.codigo_materia
+GROUP BY m.nombre_materia
+ORDER BY promedio_valoracion DESC;
+
+-- ---------------------------------------------------------------------
+-- CONSULTA 5: Estudiantes que siguen a compañeros de semestre superior del mismo programa
+-- ---------------------------------------------------------------------
+-- Pregunta de negocio: Identificar posibles relaciones de mentoría informal,
+-- donde estudiantes de semestres inferiores siguen a los más avanzados.
+--
+-- Explicación: Se hace un self join en seguidor_estudiante para obtener
+-- seguidor y seguido, luego se unen a estudiante para obtener datos de ambos,
+-- y se filtra por mismo programa y semestre del seguido mayor que el del seguidor.
+--
+-- Justificación del ALIAS: Se usan alias como "seguidor_nombre", "seguido_nombre",
+-- "programa_comun". La columna calculada se llama "diferencia_semestres" para
+-- indicar la brecha.
+-- ---------------------------------------------------------------------
+SELECT 
+    seg.nombre || ' ' || seg.apellido AS seguidor_nombre,
+    seg.semestre AS semestre_seguidor,
+    sdo.nombre || ' ' || sdo.apellido AS seguido_nombre,
+    sdo.semestre AS semestre_seguido,
+    p.nombre_programa AS programa_comun,
+    (sdo.semestre - seg.semestre) AS diferencia_semestres
+FROM seguidor_estudiante s
+JOIN estudiante seg ON s.codigo_seguidor = seg.codigo_estudiante
+JOIN estudiante sdo ON s.codigo_seguido = sdo.codigo_estudiante
+JOIN programa_academico p ON seg.codigo_programa = p.codigo_programa
+WHERE seg.codigo_programa = sdo.codigo_programa
+  AND sdo.semestre > seg.semestre
+ORDER BY diferencia_semestres DESC, seguidor_nombre;
+
+-- ---------------------------------------------------------------------
+-- CONSULTA 6: Top 3 estudiantes con más seguidores e influencia en la red
+-- ---------------------------------------------------------------------
+-- Pregunta de negocio: Identificar a los estudiantes más influyentes (que 
+-- tienen más seguidores) para invitarlos a ser embajadores de la red social 
+-- o líderes de grupos de estudio, y ver cómo se relaciona su popularidad 
+-- con la cantidad de contenido que publican.
+--
+-- Explicación: Se unen las tablas de estudiante, programa, seguidores y 
+-- publicaciones. Se usa COUNT(DISTINCT) para contar seguidores y publicaciones 
+-- sin que se dupliquen por los JOINs. La cláusula HAVING filtra solo a los 
+-- estudiantes que tienen al menos 1 seguidor. Se ordena por seguidores y se 
+-- limita a los 3 primeros.
+--
+-- Justificación del ALIAS: "total_seguidores" y "total_publicaciones" son 
+-- autoexplicativos. "nombre_completo" se concatena para legibilidad, y se 
+-- usa "programa" en lugar de "nombre_programa" para un encabezado más limpio.
+-- ---------------------------------------------------------------------
+SELECT 
+    e.codigo_estudiante,
+    e.nombre || ' ' || e.apellido AS nombre_completo,
+    pa.nombre_programa AS programa,
+    COUNT(DISTINCT s.codigo_seguidor) AS total_seguidores,
+    COUNT(DISTINCT p.codigo_publicacion) AS total_publicaciones
+FROM estudiante e
+JOIN programa_academico pa ON e.codigo_programa = pa.codigo_programa
+LEFT JOIN seguidor_estudiante s ON e.codigo_estudiante = s.codigo_seguido
+LEFT JOIN publicacion p ON e.codigo_estudiante = p.codigo_estudiante
+GROUP BY e.codigo_estudiante, e.nombre, e.apellido, pa.nombre_programa
+HAVING COUNT(DISTINCT s.codigo_seguidor) > 0
+ORDER BY total_seguidores DESC, total_publicaciones DESC
+LIMIT 3;
+
+-- =====================================================================
+-- SECCIÓN 2: VISTAS (VIEWS)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- VISTA 1: perfil_estudiante_completo
+-- ---------------------------------------------------------------------
+-- Objetivo: Consolidar los datos del estudiante con su perfil social,
+-- sus intereses y habilidades. Útil para consultas de mentorías y
+-- recomendaciones personalizadas.
+--
+-- Justificación analítica: Evita repetir múltiples JOINs cada vez que se
+-- necesita el perfil completo. Facilita la creación de informes de
+-- estudiantes por área de estudio o intereses.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE VIEW perfil_estudiante_completo AS
+SELECT 
+    e.codigo_estudiante,
+    e.nombre || ' ' || e.apellido AS nombre_completo,
+    e.correo_institucional,
+    e.semestre,
+    p.nombre_programa,
+    ps.area_estudio,
+    ps.biografia,
+    ps.tipo_mentoria,
+    STRING_AGG(DISTINCT i.nombre_interes, ', ') AS intereses,
+    STRING_AGG(DISTINCT h.nombre_habilidad, ', ') AS habilidades
+FROM estudiante e
+JOIN programa_academico p ON e.codigo_programa = p.codigo_programa
+LEFT JOIN perfil_social ps ON e.codigo_estudiante = ps.codigo_estudiante
+LEFT JOIN estudiante_interes ei ON e.codigo_estudiante = ei.codigo_estudiante
+LEFT JOIN interes i ON ei.codigo_interes = i.codigo_interes
+LEFT JOIN estudiante_habilidad eh ON e.codigo_estudiante = eh.codigo_estudiante
+LEFT JOIN habilidad h ON eh.codigo_habilidad = h.codigo_habilidad
+GROUP BY e.codigo_estudiante, e.nombre, e.apellido, e.correo_institucional,
+         e.semestre, p.nombre_programa, ps.area_estudio, ps.biografia, ps.tipo_mentoria;
+
+-- Consulta de prueba a la vista
+SELECT * FROM perfil_estudiante_completo LIMIT 10;
+
+-- ---------------------------------------------------------------------
+-- VISTA 2: resumen_actividad_estudiante
+-- ---------------------------------------------------------------------
+-- Objetivo: Mostrar por estudiante el total de publicaciones, comentarios
+-- realizados, reacciones dadas y reacciones recibidas en sus publicaciones.
+-- Útil para analítica de engagement.
+--
+-- Justificación analítica: Permite identificar usuarios influyentes y
+-- medir la participación sin necesidad de múltiples consultas.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE VIEW resumen_actividad_estudiante AS
+SELECT 
+    e.codigo_estudiante,
+    e.nombre || ' ' || e.apellido AS nombre_completo,
+    COUNT(DISTINCT p.codigo_publicacion) AS total_publicaciones,
+    COUNT(DISTINCT c.codigo_comentario) AS total_comentarios_realizados,
+    COUNT(DISTINCT r.codigo_publicacion) AS total_reacciones_dadas,
+    COUNT(DISTINCT r_recibidas.codigo_publicacion) AS total_reacciones_recibidas
+FROM estudiante e
+LEFT JOIN publicacion p ON e.codigo_estudiante = p.codigo_estudiante
+LEFT JOIN comentario c ON e.codigo_estudiante = c.codigo_estudiante
+LEFT JOIN reaccion r ON e.codigo_estudiante = r.codigo_estudiante
+LEFT JOIN publicacion p_recibidas ON e.codigo_estudiante = p_recibidas.codigo_estudiante
+LEFT JOIN reaccion r_recibidas ON p_recibidas.codigo_publicacion = r_recibidas.codigo_publicacion
+GROUP BY e.codigo_estudiante, e.nombre, e.apellido;
+
+-- Consulta de prueba a la vista
+SELECT * FROM resumen_actividad_estudiante ORDER BY total_publicaciones DESC LIMIT 10;
+
+-- ---------------------------------------------------------------------
+-- VISTA 3: estadisticas_grupos
+-- ---------------------------------------------------------------------
+-- Objetivo: Consolidar información de cada grupo: nombre, tipo, creador,
+-- número de miembros y fecha de creación. Útil para administración de
+-- comunidades.
+--
+-- Justificación analítica: Facilita el seguimiento de la participación en
+-- grupos y la identificación de grupos con más actividad.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE VIEW estadisticas_grupos AS
+SELECT 
+    g.codigo_grupo,
+    g.nombre_grupo,
+    tg.nombre_tipo AS tipo_grupo,
+    e.nombre || ' ' || e.apellido AS creador,
+    g.fecha_creacion,
+    COUNT(mg.codigo_estudiante) AS total_miembros
+FROM grupo g
+JOIN tipo_grupo tg ON g.codigo_tipo_grupo = tg.codigo_tipo_grupo
+JOIN estudiante e ON g.codigo_estudiante_creador = e.codigo_estudiante
+LEFT JOIN miembro_grupo mg ON g.codigo_grupo = mg.codigo_grupo
+GROUP BY g.codigo_grupo, g.nombre_grupo, tg.nombre_tipo, e.nombre, e.apellido, g.fecha_creacion;
+
+-- Consulta de prueba a la vista
+SELECT * FROM estadisticas_grupos ORDER BY total_miembros DESC;
+
+-- ---------------------------------------------------------------------
+-- VISTA 4: recursos_con_valoracion
+-- ---------------------------------------------------------------------
+-- Objetivo: Listar recursos académicos con su materia, autor, tipo, promedio
+-- de valoración y número de valoraciones. Útil para recomendaciones.
+--
+-- Justificación analítica: Consolida información dispersa y permite filtrar
+-- por materia o autor sin JOINs adicionales.
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE VIEW recursos_con_valoracion AS
+SELECT 
+    r.codigo_recurso,
+    r.titulo,
+    r.url_archivo,
+    m.nombre_materia AS materia,
+    tr.nombre_tipo AS tipo_recurso,
+    e.nombre || ' ' || e.apellido AS autor,
+    ROUND(AVG(v.puntuacion), 2) AS promedio_valoracion,
+    COUNT(v.codigo_estudiante) AS total_valoraciones
+FROM recurso_academico r
+JOIN materia_asignatura m ON r.codigo_materia = m.codigo_materia
+JOIN tipo_recurso tr ON r.codigo_tipo_recurso = tr.codigo_tipo_recurso
+JOIN estudiante e ON r.codigo_estudiante = e.codigo_estudiante
+LEFT JOIN valoracion_recurso v ON r.codigo_recurso = v.codigo_recurso
+GROUP BY r.codigo_recurso, r.titulo, r.url_archivo, m.nombre_materia, tr.nombre_tipo, e.nombre, e.apellido;
+
+-- Consulta de prueba a la vista
+SELECT * FROM recursos_con_valoracion ORDER BY promedio_valoracion DESC NULLS LAST;
+
+-- =====================================================================
+-- FIN DEL SCRIPT
+-- =====================================================================
