@@ -2,8 +2,7 @@
 -- TAREA 5: SISTEMA DE CONSULTAS DML Y VISTAS
 -- Red social estudiantil pascualina - Grupo 6
 -- SGBD: PostgreSQL 16
--- Integrantes: Karen Castro, Jorge Mazo, Samuel Hincapié,
---              Paula Morales, Ali Arias
+-- Integrantes: Karen Castro, Jorge Mazo, Ali Arias
 -- Fecha: 2026-11-15
 --
 -- Este script contiene:
@@ -303,6 +302,4 @@ GROUP BY r.codigo_recurso, r.titulo, r.url_archivo, m.nombre_materia, tr.nombre_
 -- Consulta de prueba a la vista
 SELECT * FROM recursos_con_valoracion ORDER BY promedio_valoracion DESC NULLS LAST;
 
--- =====================================================================
--- FIN DEL SCRIPT
--- =====================================================================
+-- FIN 
