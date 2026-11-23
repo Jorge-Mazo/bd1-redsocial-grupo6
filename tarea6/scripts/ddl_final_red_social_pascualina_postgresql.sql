@@ -3,8 +3,7 @@
 -- Script DDL de la Tarea 6: Arquitectura Híbrida (Relacional + NoSQL + IoT)
 -- SGBD: PostgreSQL 16
 -- Integrantes: Karen Julieth Castro Arias, Jorge Eliecer Mazo Uparela,
---              Samuel Hincapié Pérez, Paula Andrea Morales Zapata,
---              Ali Jose Arias Basto
+--              Paula Andrea Morales Zapata, Ali Jose Arias Basto
 -- Fecha: 2026-11-22
 -- ============================================================================
 
