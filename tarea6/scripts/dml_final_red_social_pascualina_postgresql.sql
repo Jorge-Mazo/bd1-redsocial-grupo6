@@ -8,6 +8,9 @@
 -- Cubre: JSONB (publicaciones, preferencias, IoT, logs), JOIN,
 -- SUM, COUNT, AVG, MAX, GROUP BY, HAVING, índices GIN y BRIN.
 --
+-- Integrantes: Karen Julieth Castro Arias, Jorge Eliecer Mazo Uparela,
+--              Paula Andrea Morales Zapata, Ali Jose Arias Basto
+--
 -- Ejecutar después del DDL y del script de datos de prueba de Tarea 6.
 -- =====================================================================
 
